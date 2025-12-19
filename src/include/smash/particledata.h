@@ -8,6 +8,7 @@
 #define SRC_INCLUDE_SMASH_PARTICLEDATA_H_
 
 #include <limits>
+#include <string>
 #include <utility>
 
 #include "forwarddeclarations.h"
@@ -17,6 +18,50 @@
 #include "processbranch.h"
 
 namespace smash {
+
+/**
+ * Optional configuration for the file-driven cross-section scaling profile.
+ * Keep this minimal and header-only for external control of the feature.
+ */
+namespace detail {
+/**
+ * Extrapolation behavior when querying times outside the loaded
+ * (time, scale) grid.
+ *
+ *  - Clamp  : use nearest endpoint value
+ *  - Linear : linear extrapolation using the nearest segment
+ */
+enum class Extrapolation { Clamp, Linear };
+}  // namespace detail
+
+/**
+ * Load a time-dependent cross-section scaling profile from a text file.
+ *
+ * Expected format: two columns per line: <time> <scale>
+ * - Lines starting with '#' are ignored.
+ * - Comma- or whitespace-separated values are accepted.
+ * - Times must be strictly increasing after sorting (duplicates are de-duplicated).
+ *
+ * If no profile is loaded, the legacy (polynomial/step) behavior is used.
+ *
+ * \param path Path to the profile file.
+ * \param extrapolation Extrapolation mode outside the file's time range.
+ * \return true on success, false on failure (legacy behavior remains active).
+ */
+bool LoadXsecScalingProfileFromFile(
+    const std::string &path,
+    detail::Extrapolation extrapolation = detail::Extrapolation::Clamp);
+
+/**
+ * Combine profile and legacy curve by using ONLY the file-driven profile.
+ * (Default mode if not otherwise changed.)
+ */
+void SetXsecScalingProfileModeFile();
+
+/**
+ * Ignore any loaded profile and use ONLY the legacy (polynomial/step) behavior.
+ */
+void SetXsecScalingProfileModePolynomial();
 
 enum class BelongsTo : uint8_t {
   Nothing = 0,
@@ -145,14 +190,14 @@ class ParticleData {
    * Set history_ from rvalue reference. Meant to be used only in
    * special situations e.g. in the ListModus, where a temporary HistoryData
    * is constructed from the user input.
-   *
+   * 
    * \param[in] history object to be moved from.
    */
   void set_history(HistoryData &&history) { history_ = std::move(history); }
-
-  /**
+  
+  /** 
    * Store history information
-   *
+   * 
    * The history contains the type of process and possibly the
    * PdgCodes of the parent particles (\p plist). Note that  history is not set
    * for dileptons and photons.
@@ -161,9 +206,9 @@ class ParticleData {
    * \param[in] pt process type of the particle's latest process
    * \param[in] time_last_coll time of latest collision [fm]
    * \param[in] plist list of parent particles */
-  void set_history(int ncoll, uint32_t pid, ProcessType pt,
-                   double time_last_coll, const ParticleList &plist);
-
+ void set_history(int ncoll, uint32_t pid, ProcessType pt, 
+                  double time_last_coll, const ParticleList &plist);
+   
   /**
    * Get the particle's 4-momentum
    * \return particle's 4-momentum [GeV]

@@ -9,10 +9,15 @@
 
 #include "smash/particledata.h"
 
+#include <algorithm>
 #include <cassert>
+#include <cctype>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
+#include <sstream>
 #include <vector>
 
 #include "smash/constants.h"
@@ -21,6 +26,151 @@
 #include "smash/numerics.h"
 
 namespace smash {
+
+namespace detail {
+
+struct TimeSeriesProfile {
+  std::vector<double> t;  // strictly increasing time grid
+  std::vector<double> y;  // scaling factors
+  Extrapolation extrap = Extrapolation::Clamp;
+
+  bool empty() const { return t.empty(); }
+
+  double eval(double x) const {
+    if (t.empty()) return 1.0;          // neutral factor
+    if (t.size() == 1) return y.front();
+
+    // Left of range
+    if (x <= t.front()) {
+      if (extrap == Extrapolation::Linear) {
+        const double dt = t[1] - t[0];
+        const double dy = y[1] - y[0];
+        return y[0] + dy * ((x - t[0]) / dt);
+      }
+      return y.front();
+    }
+
+    // Right of range
+    if (x >= t.back()) {
+      const size_t n = t.size();
+      if (extrap == Extrapolation::Linear) {
+        const double dt = t[n - 1] - t[n - 2];
+        const double dy = y[n - 1] - y[n - 2];
+        return y[n - 1] + dy * ((x - t[n - 1]) / dt);
+      }
+      return y.back();
+    }
+
+    // Inside: linear interpolation on [i-1, i]
+    auto it = std::lower_bound(t.begin(), t.end(), x);
+    const size_t i = static_cast<size_t>(std::distance(t.begin(), it));
+    const double t0 = t[i - 1], t1 = t[i];
+    const double y0 = y[i - 1], y1 = y[i];
+    const double u = (x - t0) / (t1 - t0);
+    return y0 * (1.0 - u) + y1 * u;
+  }
+};
+
+// Global per-process profile + mode (thread-safe initialization).
+struct XsecProfileState {
+  TimeSeriesProfile profile;
+  enum class Mode { FromPolynomial, FromFile } mode =
+      Mode::FromFile;
+  bool loaded = false;
+  std::mutex mtx;
+};
+
+// Singleton
+inline XsecProfileState& xsec_state() {
+  static XsecProfileState state;
+  return state;
+}
+
+inline std::string trim(const std::string& s) {
+  size_t a = 0, b = s.size();
+  while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
+  while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
+  return s.substr(a, b - a);
+}
+
+}  // namespace detail
+
+bool LoadXsecScalingProfileFromFile(const std::string& path,
+                                    detail::Extrapolation extrapolation) {
+  std::ifstream fin(path);
+  if (!fin) {
+    std::cerr << "[xsec-profile] ERROR: Failed to open file: " << path << "\n";
+    return false;
+  }
+
+  std::vector<std::pair<double, double>> rows;
+  rows.reserve(256);
+
+  std::string line;
+  size_t lineno = 0;
+  while (std::getline(fin, line)) {
+    ++lineno;
+    auto s = detail::trim(line);
+    if (s.empty() || s[0] == '#') continue;
+
+    // Allow comma or whitespace-separated columns
+    for (auto& ch : s) if (ch == ',') ch = ' ';
+    std::istringstream iss(s);
+    double t = 0.0, v = 1.0;
+    if (!(iss >> t >> v)) {
+      std::cerr << "[xsec-profile] WARNING: Skipping malformed line "
+                << lineno << " in " << path << ": '" << line << "'\n";
+      continue;
+    }
+    rows.emplace_back(t, v);
+  }
+
+  if (rows.empty()) {
+    std::cerr << "[xsec-profile] ERROR: No valid (time, scale) rows in file: "
+              << path << "\n";
+    return false;
+  }
+
+  std::sort(rows.begin(), rows.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+
+  // Remove duplicate-time entries (keep the last)
+  rows.erase(std::unique(rows.begin(), rows.end(),
+                         [](const auto& a, const auto& b) {
+                           return a.first == b.first;
+                         }),
+             rows.end());
+
+  auto& S = detail::xsec_state();
+  std::lock_guard<std::mutex> lk(S.mtx);
+  S.profile.t.clear();
+  S.profile.y.clear();
+  S.profile.t.reserve(rows.size());
+  S.profile.y.reserve(rows.size());
+
+  for (const auto& [ti, vi] : rows) {
+    S.profile.t.push_back(ti);
+    S.profile.y.push_back(vi);
+  }
+  S.profile.extrap = extrapolation;
+  S.loaded = true;
+
+  std::clog << "[xsec-profile] Loaded " << S.profile.t.size()
+            << " points from " << path << "\n";
+  return true;
+}
+
+void SetXsecScalingProfileModeFile() {
+  auto& S = detail::xsec_state();
+  std::lock_guard<std::mutex> lk(S.mtx);
+  S.mode = detail::XsecProfileState::Mode::FromFile;
+}
+
+void SetXsecScalingProfileModePolynomial() {
+  auto& S = detail::xsec_state();
+  std::lock_guard<std::mutex> lk(S.mtx);
+  S.mode = detail::XsecProfileState::Mode::FromPolynomial;
+}
 
 double ParticleData::effective_mass() const {
   const double m_pole = pole_mass();
@@ -130,21 +280,47 @@ double ParticleData::xsec_scaling_factor(double delta_time) const {
   }
 
   double time_of_interest = position_.x0() + delta_time;
-  // cross section scaling factor at the time_of_interest
-  double scaling_factor;
 
-  if (formation_power_ <= 0.) {
-    // use a step function to form particles
-    if (time_of_interest < formation_time_) {
-      // particles will not be fully formed at time of interest
-      scaling_factor = initial_xsec_scaling_factor_;
+  // Scaling factor computation model
+  auto& S = detail::xsec_state();
+
+  // Compute scaling factor from polynomial form
+  auto compute_scaling_factor_from_polynomial = [&]() {
+    double scaling_factor;
+    if (formation_power_ <= 0.) {
+      // use a step function to form particles
+      if (time_of_interest < formation_time_) {
+        // particles will not be fully formed at time of interest
+        scaling_factor = initial_xsec_scaling_factor_;
+      } else {
+        // particles are fully formed at time of interest
+        scaling_factor = 1.;
+      }
     } else {
-      // particles are fully formed at time of interest
-      scaling_factor = 1.;
+      // use smooth function to scale cross section (unless particles are already
+      // fully formed at desired time or will start to form later)
+      if (formation_time_ <= time_of_interest) {
+        // particles are fully formed when colliding
+        scaling_factor = 1.;
+      } else if (begin_formation_time_ >= time_of_interest) {
+        // particles will start formimg later
+        scaling_factor = initial_xsec_scaling_factor_;
+      } else {
+        // particles are in the process of formation at the given time
+        const double u =
+            (time_of_interest - begin_formation_time_) /
+            (formation_time_ - begin_formation_time_);
+        scaling_factor =
+            initial_xsec_scaling_factor_ + (1. - initial_xsec_scaling_factor_) * std::pow(u, formation_power_);
+	          // initial_xsec_scaling_factor_ + (1. - initial_xsec_scaling_factor_) * std::pow(u, 1.0);
+      }
     }
-  } else {
-    // use smooth function to scale cross section (unless particles are already
-    // fully formed at desired time or will start to form later)
+    return scaling_factor;
+  };
+
+  // Compute scaling factor from explicit profile
+  auto compute_scaling_factor_from_file = [&]() {
+    double scaling_factor;
     if (formation_time_ <= time_of_interest) {
       // particles are fully formed when colliding
       scaling_factor = 1.;
@@ -153,16 +329,33 @@ double ParticleData::xsec_scaling_factor(double delta_time) const {
       scaling_factor = initial_xsec_scaling_factor_;
     } else {
       // particles are in the process of formation at the given time
-      scaling_factor =
-          initial_xsec_scaling_factor_ +
-          (1. - initial_xsec_scaling_factor_) *
-              std::pow((time_of_interest - begin_formation_time_) /
-                           (formation_time_ - begin_formation_time_),
-                       formation_power_);
+      const double u =
+          (time_of_interest - begin_formation_time_) /
+          (formation_time_ - begin_formation_time_);
+      std::lock_guard<std::mutex> lk(S.mtx);
+      scaling_factor = initial_xsec_scaling_factor_ + (1.0 - initial_xsec_scaling_factor_) * S.profile.eval(u);
     }
+    return scaling_factor;
+  };
+
+
+  // If no profile file loaded at all, use polynomial form
+  if (!S.loaded) {
+    return compute_scaling_factor_from_polynomial();
   }
-  return scaling_factor;
+
+  switch (S.mode) {
+    case detail::XsecProfileState::Mode::FromFile:
+      // profile is a function of normalized formation time
+      return compute_scaling_factor_from_file();
+
+    case detail::XsecProfileState::Mode::FromPolynomial:
+    default:
+      // ignore profile file completely
+      return compute_scaling_factor_from_polynomial();
+  }
 }
+
 
 std::ostream &operator<<(std::ostream &out, const ParticleData &p) {
   out.fill(' ');
