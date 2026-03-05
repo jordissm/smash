@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+
 #include "smash/algorithms.h"
 #include "smash/boxmodus.h"
 #include "smash/configuration.h"
@@ -342,6 +343,17 @@ std::filesystem::path ListModus::file_path_(std::optional<int> file_id) {
 }
 
 std::string ListModus::next_event_() {
+  // During validation, do NOT reuse cached event and do NOT rewind at EOF.
+  if (!disable_replay_for_validation_) {
+    if (have_cached_event_) {
+      return cached_event_string_;
+    }
+  } else {
+    // validation: never cache
+    have_cached_event_ = false;
+    cached_event_string_.clear();
+  }
+
   const std::filesystem::path fpath = file_path_(file_id_);
   std::ifstream ifs{fpath};
   ifs.seekg(last_read_position_);
@@ -354,11 +366,28 @@ std::string ListModus::next_event_() {
       ifs.close();
       return next_event_();
     } else {
-      throw std::runtime_error(
-          "Attempt to read in next event in ListModus object but no further "
-          "data found in single provided file. Please, check your setup.");
+      ifs.close();
+
+      if (disable_replay_for_validation_) {
+        // Original behavior: stop scanning at EOF
+        throw std::runtime_error(
+            "Validation reached end of single provided file.");
+      }
+
+      // Runtime behavior: rewind and replay
+      logg[LList].debug()
+          << "Reached EOF of single-event list file; rewinding for replay.";
+      last_read_position_ = 0;
+      return next_event_();
     }
   }
+
+  //   } else {
+  //     throw std::runtime_error(
+  //         "Attempt to read in next event in ListModus object but no further "
+  //         "data found in single provided file. Please, check your setup.");
+  //   }
+  // }
 
   // read one event. events marked by line # event end i in case of Oscar
   // output. Assume one event per file for all other output formats
@@ -383,6 +412,12 @@ std::string ListModus::next_event_() {
   // save position for next event read
   last_read_position_ = ifs.tellg();
   ifs.close();
+
+  if (!disable_replay_for_validation_) {
+    cached_event_string_ = std::move(event_string);
+    have_cached_event_ = true;
+    return cached_event_string_;
+  }
 
   return event_string;
 }
@@ -430,6 +465,9 @@ bool ListModus::file_has_events_(std::filesystem::path filepath,
  */
 void ListModus::validate_list_of_particles_of_all_events_() const {
   ListModus utility_copy{*this};
+  utility_copy.disable_replay_for_validation_ = true;
+  utility_copy.have_cached_event_ = false;
+  utility_copy.cached_event_string_.clear();
   utility_copy.verbose_ = false;
   utility_copy.warn_about_mass_discrepancy_ = false;
   utility_copy.warn_about_off_shell_particles_ = false;

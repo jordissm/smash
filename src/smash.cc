@@ -563,10 +563,20 @@ int main(int argc, char *argv[]) {
     ensure_path_is_valid(output_path);
     std::string tabulations_path;
     if (cache_integrals) {
-      tabulations_path = output_path.has_parent_path()
-                             ? output_path.parent_path().string()
-                             : ".";
-      tabulations_path += "/tabulations";
+      std::filesystem::path base_dir;
+      if (output_path.has_parent_path()) {
+        base_dir = output_path.parent_path();
+        // Go up one more level if possible
+        if (base_dir.has_parent_path()) {
+          base_dir = base_dir.parent_path();
+        }
+      } else {
+        base_dir = ".";
+      }
+      // tabulations_path = output_path.has_parent_path()
+      //                        ? output_path.parent_path().string()
+      //                        : ".";
+      tabulations_path = (base_dir / "tabulations").string();
     } else {
       tabulations_path = "";
     }

@@ -266,6 +266,11 @@ class ListModus : public ModusDefault {
   /// Last read position in current file
   std::streampos last_read_position_ = 0;
 
+  bool disable_replay_for_validation_ = false;
+
+  bool have_cached_event_ = false; // whether cached_event_string_ is valid
+  std::string cached_event_string_;
+
   /// Auxiliary flag to warn about mass-discrepancies only once per instance
   bool warn_about_mass_discrepancy_ = true;
   /// Auxiliary flag to warn about off-shell particles only once per instance
