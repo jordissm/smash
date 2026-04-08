@@ -320,6 +320,7 @@ struct OutputDefaultQuantities {
       "ID",
       "charge",
       "ncoll",
+      "begin_form_time",
       "form_time",
       "xsecfac",
       "proc_id_origin",

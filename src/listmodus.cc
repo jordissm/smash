@@ -164,6 +164,8 @@ void ListModus::insert_optional_quantities_to_(
   HistoryData hist = p.get_history();
   std::ostringstream error_message{"", std::ios_base::ate};
 
+  double begin_form_time;
+
   for (size_t i = 0; i < optional_fields_.size(); ++i) {
     size_t len{};
     auto field = optional_fields_[i];
@@ -186,8 +188,11 @@ void ListModus::insert_optional_quantities_to_(
         error_message << "ncoll < 0.\n";
       }
       hist.collisions_per_particle = ncoll;
-    } else if (field == "form_time") {
-      p.set_formation_time(std::stod(quantity, &len));
+    } else if (field == "begin_form_time") {
+      begin_form_time = std::stod(quantity, &len);
+    // } else if (field == "form_time") {
+    //   form_time = std::stod(quantity, &len);
+      // p.set_formation_time(std::stod(quantity, &len));
     } else if (field == "xsecfac") {
       const double xsecfac = std::stod(quantity, &len);
       if (xsecfac < 0 || xsecfac > 1) {
@@ -251,6 +256,12 @@ void ListModus::insert_optional_quantities_to_(
           << " not read exactly as written in the input particle list.\n";
     }
   }
+
+  double gamma = std::sqrt(1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
+  double form_time = begin_form_time + 1.0 * gamma;
+
+  // Use a "slow" hadronic formation profile
+  p.set_slow_formation_times(begin_form_time, form_time);
 
   if (error_message.str().size() > 0) {
     logg[LList].error()

@@ -263,6 +263,10 @@ class OutputFormatter {
           return this->converter_.as_integer(
               in.get_history().collisions_per_particle);
         });
+      } else if (quantity == "begin_form_time") {
+        getters_.push_back([this](const ParticleData& in) {
+          return this->converter_.as_double(in.begin_formation_time());
+        });
       } else if (quantity == "form_time") {
         getters_.push_back([this](const ParticleData& in) {
           return this->converter_.as_double(in.formation_time());
@@ -545,6 +549,7 @@ class OutputFormatter {
       {"id", "none"},  // used in OSCAR1999
       {"charge", "e"},
       {"ncoll", "none"},
+      {"begin_form_time", "fm"},
       {"form_time", "fm"},
       {"xsecfac", "none"},
       {"proc_id_origin", "none"},

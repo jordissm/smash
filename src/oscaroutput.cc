@@ -320,11 +320,11 @@ void OscarOutput<Format, Contents>::at_intermediate_time(
  * <div class="fragment">
  * <div class="line"><span class="preprocessor">#!OSCAR2013 particle_lists
  *   t x y z mass p0 px py pz pdg
- *   ID charge ncoll form_time xsecfac proc_id_origin proc_type_origin
+ *   ID charge ncoll begin_form_time form_time xsecfac proc_id_origin proc_type_origin
  *   time_last_coll pdg_mother1 pdg_mother2 baryon_number strangeness</span>
  * </div>
  * <div class="line"><span class="preprocessor">\# Units: fm fm fm fm GeV GeV
- * GeV GeV GeV none none e none fm none none none fm none none none none</span>
+ * GeV GeV GeV none none e none fm fm none none none fm none none none none</span>
  * </div> <div class="line"><span class="preprocessor">\# SMASH_version</span>
  * </div>
  * </div>
@@ -382,7 +382,7 @@ void OscarOutput<Format, Contents>::at_intermediate_time(
  *
  * <div class="fragment">
  * <div class="line"><span class="preprocessor">t x y z mass p0 px py pz pdg
- * ID charge ncoll form_time xsecfac proc_id_origin proc_type_origin
+ * ID charge ncoll begin_form_time form_time xsecfac proc_id_origin proc_type_origin
  * time_last_coll pdg_mother1 pdg_mother2 baryon_number strangeness</span></div>
  * </div>
  *
@@ -390,6 +390,7 @@ void OscarOutput<Format, Contents>::at_intermediate_time(
  * The additional particle properties available in the extended output format
  * are:
  * \li \key ncoll: Number of collisions the particle has undergone
+ * \li \key begin_form_time: time when the particle starts to be formed
  * \li \key form_time: Formation time of the particle
  * \li \key xsecfac: Cross section scaling factor (if the particles are
  *     not yet fully formed at the time of interaction, the cross section for
