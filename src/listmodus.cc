@@ -258,7 +258,7 @@ void ListModus::insert_optional_quantities_to_(
   }
 
   double gamma = std::sqrt(1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
-  double form_time = begin_form_time + 1.0 * gamma;
+  double form_time = begin_form_time + 0.0 * gamma;
 
   // Use a "slow" hadronic formation profile
   p.set_slow_formation_times(begin_form_time, form_time);
