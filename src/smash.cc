@@ -513,13 +513,13 @@ int main(int argc, char *argv[]) {
       // Default behavior: Polynomial
       std::string scaling_type = "Polynomial";
 
-      if (configuration.has_value(InputKeys::gen_xsecScalingFactorType)) {
-        scaling_type = configuration.take(InputKeys::gen_xsecScalingFactorType);
+      if (configuration.has_value(InputKeys::collTerm_xsecScalingFactor_type)) {
+        scaling_type = configuration.take(InputKeys::collTerm_xsecScalingFactor_type);
       }
 
       if (scaling_type == "File") {
 
-        if (!configuration.has_value(InputKeys::gen_xsecScalingFactorPath)) {
+        if (!configuration.has_value(InputKeys::collTerm_xsecScalingFactor_path)) {
           logg[LMain].warn(
               "xsec scaling factor: Type is 'File' but no Path was provided; "
               "falling back to Polynomial mode");
@@ -528,7 +528,7 @@ int main(int argc, char *argv[]) {
 
         } else {
           const std::string profile_path =
-              configuration.take(InputKeys::gen_xsecScalingFactorPath);
+              configuration.take(InputKeys::collTerm_xsecScalingFactor_path);
 
           if (smash::LoadXsecScalingProfileFromFile(
                   profile_path, smash::detail::Extrapolation::Linear)) {

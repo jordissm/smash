@@ -69,14 +69,15 @@ struct InputSections {
   /// Subsection for the string transition
   inline static const Section c_stringTransition =
       InputSections::collisionTerm + "String_Transition";
+  /// Subsection for the cross section scaling factor profile
+  inline static const Section c_xsecScalingFactor =
+      InputSections::collisionTerm + "Cross_Section_Scaling_Factor";
 
   /// Section for the forced thermalization
   inline static const Section forcedThermalization{"Forced_Thermalization"};
 
   /// General section
   inline static const Section general{"General"};
-  /// Subsection for the cross section scaling factor profile
-  inline static const Section g_xsecScalingFactor = InputSections::general + "Cross_Section_Scaling_Factor";
   /// Subsection for the minimum-nonempty-ensembles mechanism
   inline static const Section g_minEnsembles =
       InputSections::general + "Minimum_Nonempty_Ensembles";
@@ -1254,15 +1255,6 @@ struct InputKeys {
    */
   inline static const Key<double> gen_deltaTime{
       InputSections::general + "Delta_Time", 1.0, {"0.50"}};
-
-  /*!\Userguide
-   *
-   */
-  inline static const Key<std::string> gen_xsecScalingFactorType{
-      InputSections::g_xsecScalingFactor + "Type", {"0.50"}};
-
-  inline static const Key<std::string> gen_xsecScalingFactorPath{
-      InputSections::g_xsecScalingFactor + "Path", {"0.50"}};
 
   /*!\Userguide
    * \page doxypage_input_conf_general
@@ -2683,6 +2675,15 @@ struct InputKeys {
    */
   inline static const Key<bool> collTerm_useAQM{
       InputSections::collisionTerm + "Use_AQM", true, {"1.3"}};
+
+  /*!\Userguide
+   *
+   */
+  inline static const Key<std::string> collTerm_xsecScalingFactor_type{
+      InputSections::c_xsecScalingFactor + "Type", {"0.50"}};
+
+  inline static const Key<std::string> collTerm_xsecScalingFactor_path{
+      InputSections::c_xsecScalingFactor + "Path", {"0.50"}};
 
   /*!\Userguide
    * \page doxypage_input_conf_ct_pauliblocker
@@ -6088,8 +6089,6 @@ struct InputKeys {
   inline static const std::vector<key_references_variant> list = {
       std::cref(particles),
       std::cref(decaymodes),
-      std::cref(gen_xsecScalingFactorType),
-      std::cref(gen_xsecScalingFactorPath),
       std::cref(gen_endTime),
       std::cref(gen_modus),
       std::cref(gen_nevents),
@@ -6207,6 +6206,8 @@ struct InputKeys {
       std::cref(collTerm_photons_fractionalPhotons),
       std::cref(collTerm_HF_AQMbSuppression),
       std::cref(collTerm_HF_AQMcSuppression),
+      std::cref(collTerm_xsecScalingFactor_type),
+      std::cref(collTerm_xsecScalingFactor_path),
       std::cref(modi_collider_eKin),
       std::cref(modi_collider_eTot),
       std::cref(modi_collider_pLab),
