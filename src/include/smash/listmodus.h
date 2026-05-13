@@ -279,6 +279,9 @@ class ListModus : public ModusDefault {
   /// Auxiliary flag to indicate the type of spin interaction used
   SpinInteractionType spin_interaction_type_ = SpinInteractionType::Off;
 
+  /// Proper formation time for slow cross-section formation profiles
+  double proper_formation_time_ = 0.0;
+
   /**
    * Flag to suppress some error messages. This is used during the validation
    * of particles in all events, because there we do not know how many events

@@ -915,8 +915,18 @@ Experiment<Modus>::Experiment(Configuration &config,
         auto &key = InputKeys::modi_collider_collisionWithinNucleus;
         const bool restore_key = config.has_value(key);
         const bool temporary_taken_key = config.take(key);
+        const bool is_list_modus =
+            config.has_value(InputKeys::modi_list_fileDirectory) ||
+            config.has_value(InputKeys::modi_listBox_fileDirectory);
+        const auto &formation_time_key =
+            InputKeys::collTerm_xsecFormationScaling_profile_formationTime;
+        const double xsec_formation_time =
+            is_list_modus ? config.take(formation_time_key) : 0.0;
         auto modus_config =
             config.extract_complete_sub_configuration(InputSections::modi);
+        if (is_list_modus) {
+          modus_config.set_value(formation_time_key, xsec_formation_time);
+        }
         if (restore_key) {
           config.set_value(key, temporary_taken_key);
         }

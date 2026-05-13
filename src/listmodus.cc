@@ -74,6 +74,8 @@ ListModus::ListModus(Configuration modus_config,
 
   // Set the default values for the spin interaction type
   spin_interaction_type_ = param.spin_interaction_type;
+  proper_formation_time_ = modus_config.take(
+      InputKeys::collTerm_xsecFormationScaling_profile_formationTime);
 
   // Impose strict requirement on possible keys present in configuration file
   const bool file_prefix_used = modus_config.has_value(file_prefix_key);
@@ -164,7 +166,8 @@ void ListModus::insert_optional_quantities_to_(
   HistoryData hist = p.get_history();
   std::ostringstream error_message{"", std::ios_base::ate};
 
-  double begin_form_time;
+  double begin_form_time = p.position().x0();
+  bool has_begin_form_time = false;
 
   for (size_t i = 0; i < optional_fields_.size(); ++i) {
     size_t len{};
@@ -190,8 +193,9 @@ void ListModus::insert_optional_quantities_to_(
       hist.collisions_per_particle = ncoll;
     } else if (field == "begin_form_time") {
       begin_form_time = std::stod(quantity, &len);
-    // } else if (field == "form_time") {
-    //   form_time = std::stod(quantity, &len);
+      has_begin_form_time = true;
+      // } else if (field == "form_time") {
+      //   form_time = std::stod(quantity, &len);
       // p.set_formation_time(std::stod(quantity, &len));
     } else if (field == "xsecfac") {
       const double xsecfac = std::stod(quantity, &len);
@@ -257,15 +261,14 @@ void ListModus::insert_optional_quantities_to_(
     }
   }
 
-  double gamma = std::sqrt(1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
-  double proper_formation_time = 0.0;
-  if (modus_config.has_value(InputKeys::collTerm_xsecFormationScaling_profile_formationTime)) {
-    proper_formation_time = modus_config.value(InputKeys::collTerm_xsecFormationScaling_profile_formationTime);
-  }
-  double form_time = begin_form_time + proper_formation_time * gamma;
+  if (has_begin_form_time) {
+    double gamma = std::sqrt(
+        1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
+    double form_time = begin_form_time + proper_formation_time_ * gamma;
 
-  // Use a "slow" hadronic formation profile
-  p.set_slow_formation_times(begin_form_time, form_time);
+    // Use a "slow" hadronic formation profile
+    p.set_slow_formation_times(begin_form_time, form_time);
+  }
 
   if (error_message.str().size() > 0) {
     logg[LList].error()
