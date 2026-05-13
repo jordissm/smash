@@ -69,9 +69,12 @@ struct InputSections {
   /// Subsection for the string transition
   inline static const Section c_stringTransition =
       InputSections::collisionTerm + "String_Transition";
-  /// Subsection for the cross section scaling factor profile
-  inline static const Section c_xsecScalingFactor =
-      InputSections::collisionTerm + "Cross_Section_Scaling_Factor";
+  /// Subsection for the cross section scaling
+  inline static const Section c_xsecFormationScaling =
+      InputSections::collisionTerm + "Cross_Section_Formation_Scaling";
+  /// Subsection for the cross section scaling profile
+  inline static const Section c_xsecFormationScaling_profile =
+      InputSections::c_xsecFormationScaling + "Profile";
 
   /// Section for the forced thermalization
   inline static const Section forcedThermalization{"Forced_Thermalization"};
@@ -2177,6 +2180,15 @@ struct InputKeys {
       InputSections::collisionTerm + "Cross_Section_Scaling", 1.0, {"2.0"}};
 
   /*!\Userguide
+   *
+   */
+  inline static const Key<double> collTerm_xsecFormationScaling_profile_formationTime{
+      InputSections::c_xsecFormationScaling_profile + "Formation_Time", 1.0, {"2.00"}};
+
+  inline static const Key<std::string> collTerm_xsecFormationScaling_profile_path{
+      InputSections::c_xsecFormationScaling_profile + "Path", {"0.50"}};
+
+  /*!\Userguide
    * \page doxypage_input_conf_collision_term
    * \optional_key{key_CT_elastic_cross_section_,Elastic_Cross_Section,double,-1.0}
    *
@@ -2675,15 +2687,6 @@ struct InputKeys {
    */
   inline static const Key<bool> collTerm_useAQM{
       InputSections::collisionTerm + "Use_AQM", true, {"1.3"}};
-
-  /*!\Userguide
-   *
-   */
-  inline static const Key<std::string> collTerm_xsecScalingFactor_type{
-      InputSections::c_xsecScalingFactor + "Type", {"0.50"}};
-
-  inline static const Key<std::string> collTerm_xsecScalingFactor_path{
-      InputSections::c_xsecScalingFactor + "Path", {"0.50"}};
 
   /*!\Userguide
    * \page doxypage_input_conf_ct_pauliblocker
@@ -6148,6 +6151,8 @@ struct InputKeys {
       std::cref(collTerm_additionalElasticCrossSection),
       std::cref(collTerm_collisionCriterion),
       std::cref(collTerm_crossSectionScaling),
+      std::cref(collTerm_xsecFormationScaling_profile_formationTime),
+      std::cref(collTerm_xsecFormationScaling_profile_path),
       std::cref(collTerm_elasticCrossSection),
       std::cref(collTerm_elasticNNCutoffSqrts),
       std::cref(collTerm_totXsStrategy),
@@ -6206,8 +6211,6 @@ struct InputKeys {
       std::cref(collTerm_photons_fractionalPhotons),
       std::cref(collTerm_HF_AQMbSuppression),
       std::cref(collTerm_HF_AQMcSuppression),
-      std::cref(collTerm_xsecScalingFactor_type),
-      std::cref(collTerm_xsecScalingFactor_path),
       std::cref(modi_collider_eKin),
       std::cref(modi_collider_eTot),
       std::cref(modi_collider_pLab),

@@ -508,56 +508,67 @@ int main(int argc, char *argv[]) {
 
     setup_default_float_traps();
 
-    // Load scaling factor profile if requested
-    {
-      // Default behavior: Polynomial
-      std::string scaling_type = "Polynomial";
 
-      if (configuration.has_value(InputKeys::collTerm_xsecScalingFactor_type)) {
-        scaling_type = configuration.take(InputKeys::collTerm_xsecScalingFactor_type);
-      }
-
-      if (scaling_type == "File") {
-
-        if (!configuration.has_value(InputKeys::collTerm_xsecScalingFactor_path)) {
-          logg[LMain].warn(
-              "xsec scaling factor: Type is 'File' but no Path was provided; "
-              "falling back to Polynomial mode");
-
-          smash::SetXsecScalingProfileModePolynomial();
-
-        } else {
-          const std::string profile_path =
-              configuration.take(InputKeys::collTerm_xsecScalingFactor_path);
-
-          if (smash::LoadXsecScalingProfileFromFile(
-                  profile_path, smash::detail::Extrapolation::Linear)) {
-
-            smash::SetXsecScalingProfileModeFile();
-            logg[LMain].info("xsec scaling factor: using file '", profile_path, "'");
-
-          } else {
-            logg[LMain].warn(
-                "xsec scaling factor: failed to load file '", profile_path,
-                "'; falling back to Polynomial mode");
-
-            smash::SetXsecScalingProfileModePolynomial();
-          }
-        }
-
+    // Check if there is a file specified for the scaling factor profile. 
+    if (configuration.has_value(InputKeys::collTerm_xsecScaling_profile_path)) {
+      const std::string profile_path =
+          configuration.take(InputKeys::collTerm_xsecScaling_profile_path);
+      // Try to load the profile from file.
+      if (smash::load_xsec_formation_scaling_profile_from_file(profile_path)) {
+        // Set cross-section scaling profile mode to file if loading was successful.
+        smash::set_xsec_formation_scaling_profile_from_file();
+        logg[LMain].info("xsec scaling factor: using file '", profile_path, "'");
       } else {
-        // Covers "Polynomial" and missing/unknown values
-        smash::SetXsecScalingProfileModePolynomial();
-
-        if (scaling_type != "Polynomial") {
-          logg[LMain].warn(
-              "xsec scaling factor: unknown Type '", scaling_type,
-              "'; defaulting to Polynomial");
-        } else {
-          logg[LMain].info("xsec scaling factor: using Polynomial mode");
-        }
+        logg[LMain].warn(
+            "xsec scaling factor: failed to load file '", profile_path);
       }
     }
+
+    //   if (configuration.has_value(InputKeys::collTerm_xsecScaling_type)) {
+    //     scaling_type = configuration.take(InputKeys::collTerm_xsecScaling_type);
+    //   }
+
+    //   if (scaling_type == "File") {
+
+    //     if (!configuration.has_value(InputKeys::collTerm_xsecScaling_path)) {
+    //       logg[LMain].warn(
+    //           "xsec scaling factor: Type is 'File' but no Path was provided; "
+    //           "falling back to Polynomial mode");
+
+    //       smash::SetXsecScalingProfileModePolynomial();
+
+    //     } else {
+    //       const std::string profile_path =
+    //           configuration.take(InputKeys::collTerm_xsecScaling_path);
+
+    //       if (smash::LoadXsecScalingProfileFromFile(
+    //               profile_path, smash::detail::Extrapolation::Linear)) {
+
+    //         smash::SetXsecScalingProfileModeFile();
+    //         logg[LMain].info("xsec scaling factor: using file '", profile_path, "'");
+
+    //       } else {
+    //         logg[LMain].warn(
+    //             "xsec scaling factor: failed to load file '", profile_path,
+    //             "'; falling back to Polynomial mode");
+
+    //         smash::SetXsecScalingProfileModePolynomial();
+    //       }
+    //     }
+
+    //   } else {
+    //     // Covers "Polynomial" and missing/unknown values
+    //     smash::SetXsecScalingProfileModePolynomial();
+
+    //     if (scaling_type != "Polynomial") {
+    //       logg[LMain].warn(
+    //           "xsec scaling factor: unknown Type '", scaling_type,
+    //           "'; defaulting to Polynomial");
+    //     } else {
+    //       logg[LMain].info("xsec scaling factor: using Polynomial mode");
+    //     }
+    //   }
+    // }
 
     // Check output path
     ensure_path_is_valid(output_path);

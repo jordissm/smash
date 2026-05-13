@@ -258,7 +258,11 @@ void ListModus::insert_optional_quantities_to_(
   }
 
   double gamma = std::sqrt(1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
-  double form_time = begin_form_time + 0.0 * gamma;
+  double proper_formation_time = 0.0;
+  if (modus_config.has_value(InputKeys::collTerm_xsecFormationScaling_profile_formationTime)) {
+    proper_formation_time = modus_config.value(InputKeys::collTerm_xsecFormationScaling_profile_formationTime);
+  }
+  double form_time = begin_form_time + proper_formation_time * gamma;
 
   // Use a "slow" hadronic formation profile
   p.set_slow_formation_times(begin_form_time, form_time);

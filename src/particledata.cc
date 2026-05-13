@@ -32,7 +32,6 @@ namespace detail {
 struct TimeSeriesProfile {
   std::vector<double> t;  // strictly increasing time grid
   std::vector<double> y;  // scaling factors
-  Extrapolation extrap = Extrapolation::Clamp;
 
   bool empty() const { return t.empty(); }
 
@@ -42,23 +41,17 @@ struct TimeSeriesProfile {
 
     // Left of range
     if (x <= t.front()) {
-      if (extrap == Extrapolation::Linear) {
-        const double dt = t[1] - t[0];
-        const double dy = y[1] - y[0];
-        return y[0] + dy * ((x - t[0]) / dt);
-      }
-      return y.front();
+      const double dt = t[1] - t[0];
+      const double dy = y[1] - y[0];
+      return y[0] + dy * ((x - t[0]) / dt);
     }
 
     // Right of range
     if (x >= t.back()) {
       const size_t n = t.size();
-      if (extrap == Extrapolation::Linear) {
-        const double dt = t[n - 1] - t[n - 2];
-        const double dy = y[n - 1] - y[n - 2];
-        return y[n - 1] + dy * ((x - t[n - 1]) / dt);
-      }
-      return y.back();
+      const double dt = t[n - 1] - t[n - 2];
+      const double dy = y[n - 1] - y[n - 2];
+      return y[n - 1] + dy * ((x - t[n - 1]) / dt);
     }
 
     // Inside: linear interpolation on [i-1, i]
@@ -95,8 +88,7 @@ inline std::string trim(const std::string& s) {
 
 }  // namespace detail
 
-bool LoadXsecScalingProfileFromFile(const std::string& path,
-                                    detail::Extrapolation extrapolation) {
+bool load_xsec_formation_scaling_profile_from_file(const std::string& path) {
   std::ifstream fin(path);
   if (!fin) {
     std::cerr << "[xsec-profile] ERROR: Failed to open file: " << path << "\n";
@@ -152,7 +144,7 @@ bool LoadXsecScalingProfileFromFile(const std::string& path,
     S.profile.t.push_back(ti);
     S.profile.y.push_back(vi);
   }
-  S.profile.extrap = extrapolation;
+
   S.loaded = true;
 
   std::clog << "[xsec-profile] Loaded " << S.profile.t.size()
@@ -160,13 +152,13 @@ bool LoadXsecScalingProfileFromFile(const std::string& path,
   return true;
 }
 
-void SetXsecScalingProfileModeFile() {
+void set_xsec_formation_scaling_profile_from_file() {
   auto& S = detail::xsec_state();
   std::lock_guard<std::mutex> lk(S.mtx);
   S.mode = detail::XsecProfileState::Mode::FromFile;
 }
 
-void SetXsecScalingProfileModePolynomial() {
+void set_xsec_formation_scaling_profile_from_polynomial() {
   auto& S = detail::xsec_state();
   std::lock_guard<std::mutex> lk(S.mtx);
   S.mode = detail::XsecProfileState::Mode::FromPolynomial;
@@ -285,7 +277,7 @@ double ParticleData::xsec_scaling_factor(double delta_time) const {
   auto& S = detail::xsec_state();
 
   // Compute scaling factor from polynomial form
-  auto compute_scaling_factor_from_polynomial = [&]() {
+  auto compute_xsec_scaling_factor_from_polynomial = [&]() {
     double scaling_factor;
     if (formation_power_ <= 0.) {
       // use a step function to form particles
@@ -319,7 +311,7 @@ double ParticleData::xsec_scaling_factor(double delta_time) const {
   };
 
   // Compute scaling factor from explicit profile
-  auto compute_scaling_factor_from_file = [&]() {
+  auto compute_xsec_scaling_factor_from_file = [&]() {
     double scaling_factor;
     if (formation_time_ <= time_of_interest) {
       // particles are fully formed when colliding
@@ -338,21 +330,15 @@ double ParticleData::xsec_scaling_factor(double delta_time) const {
     return scaling_factor;
   };
 
-
-  // If no profile file loaded at all, use polynomial form
-  if (!S.loaded) {
-    return compute_scaling_factor_from_polynomial();
-  }
-
   switch (S.mode) {
     case detail::XsecProfileState::Mode::FromFile:
       // profile is a function of normalized formation time
-      return compute_scaling_factor_from_file();
+      return compute_xsec_scaling_factor_from_file();
 
     case detail::XsecProfileState::Mode::FromPolynomial:
     default:
       // ignore profile file completely
-      return compute_scaling_factor_from_polynomial();
+      return compute_xsec_scaling_factor_from_polynomial();
   }
 }
 
