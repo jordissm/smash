@@ -510,9 +510,9 @@ int main(int argc, char *argv[]) {
 
 
     // Check if there is a file specified for the scaling factor profile. 
-    if (configuration.has_value(InputKeys::collTerm_xsecScaling_profile_path)) {
+    if (configuration.has_value(InputKeys::collTerm_xsecFormationScaling_profile_path)) {
       const std::string profile_path =
-          configuration.take(InputKeys::collTerm_xsecScaling_profile_path);
+          configuration.take(InputKeys::collTerm_xsecFormationScaling_profile_path);
       // Try to load the profile from file.
       if (smash::load_xsec_formation_scaling_profile_from_file(profile_path)) {
         // Set cross-section scaling profile mode to file if loading was successful.

@@ -37,6 +37,11 @@ bool load_xsec_formation_scaling_profile_from_file(const std::string &path);
  */
 void set_xsec_formation_scaling_profile_from_file();
 
+/**
+ * Set the cross-section formation scaling to use a polynomial profile.
+ */
+void set_xsec_formation_scaling_profile_from_polynomial();
+
 enum class BelongsTo : uint8_t {
   Nothing = 0,
   Projectile = 1,
