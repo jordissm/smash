@@ -237,14 +237,14 @@ void Action::assign_formation_time_to_outgoing_particles() {
       } else {
         // not a string product
         new_particle.set_slow_formation_times(
-            form_time_begin, last_formed_in_part->formation_time());
+            form_time_begin, last_formed_in_part->formation_time() + 2.0);
         new_particle.set_cross_section_scaling_factor(sc);
       }
     }
   } else {
     for (ParticleData &new_particle : outgoing_particles_) {
       if (new_particle.initial_xsec_scaling_factor() == 1.0) {
-        new_particle.set_formation_time(time_of_execution_ + 1.0);
+        new_particle.set_formation_time(time_of_execution_);
       }
     }
   }
