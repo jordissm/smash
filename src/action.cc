@@ -237,7 +237,7 @@ void Action::assign_formation_time_to_outgoing_particles() {
       } else {
         // not a string product
         new_particle.set_slow_formation_times(
-            form_time_begin, last_formed_in_part->formation_time() + 2.0);
+            form_time_begin, last_formed_in_part->formation_time());
         new_particle.set_cross_section_scaling_factor(sc);
       }
     }
