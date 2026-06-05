@@ -244,7 +244,7 @@ void Action::assign_formation_time_to_outgoing_particles() {
   } else {
     for (ParticleData &new_particle : outgoing_particles_) {
       if (new_particle.initial_xsec_scaling_factor() == 1.0) {
-        new_particle.set_formation_time(time_of_execution_);
+        new_particle.set_formation_time(time_of_execution_ + 1.0);
       }
     }
   }
