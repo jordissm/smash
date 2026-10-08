@@ -166,8 +166,8 @@ void ListModus::insert_optional_quantities_to_(
   HistoryData hist = p.get_history();
   std::ostringstream error_message{"", std::ios_base::ate};
 
-  double begin_form_time = p.position().x0();
-  bool has_begin_form_time = false;
+  double prod_time = p.position().x0();
+  bool has_prod_time = false;
 
   for (size_t i = 0; i < optional_fields_.size(); ++i) {
     size_t len{};
@@ -191,12 +191,12 @@ void ListModus::insert_optional_quantities_to_(
         error_message << "ncoll < 0.\n";
       }
       hist.collisions_per_particle = ncoll;
-    } else if (field == "begin_form_time") {
-      begin_form_time = std::stod(quantity, &len);
-      has_begin_form_time = true;
-      // } else if (field == "form_time") {
-      //   form_time = std::stod(quantity, &len);
-      // p.set_formation_time(std::stod(quantity, &len));
+    } else if (field == "prod_time") {
+      prod_time = std::stod(quantity, &len);
+      has_prod_time = true;
+    } else if (field == "form_time") {
+      // Parse the new column; applying it to the formation profile is deferred.
+      (void)std::stod(quantity, &len);
     } else if (field == "xsecfac") {
       const double xsecfac = std::stod(quantity, &len);
       if (xsecfac < 0 || xsecfac > 1) {
@@ -261,13 +261,13 @@ void ListModus::insert_optional_quantities_to_(
     }
   }
 
-  if (has_begin_form_time) {
+  if (has_prod_time) {
     double gamma = std::sqrt(
         1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
-    double form_time = begin_form_time + proper_formation_time_ * gamma;
+    double form_time = prod_time + proper_formation_time_ * gamma;
 
     // Use a "slow" hadronic formation profile
-    p.set_slow_formation_times(begin_form_time, form_time);
+    p.set_slow_formation_times(prod_time, form_time);
   }
 
   if (error_message.str().size() > 0) {
