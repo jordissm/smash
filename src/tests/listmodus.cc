@@ -13,6 +13,8 @@
 
 #include <cmath>
 #include <filesystem>
+#include <iostream>
+#include <sstream>
 #include <string>
 
 #include "setup.h"
@@ -663,6 +665,111 @@ TEST(imported_production_and_formation_times) {
       COMPARE(created.formation_time(), form_time);
       COMPARE(created.position().x0(), 0.0);
     }
+  }
+}
+
+TEST(imported_production_time_status) {
+  Test::create_stable_smashon_particletypes();
+  const auto input_path = testoutputpath / "production_time_status";
+  std::filesystem::create_directories(input_path);
+  // Restore stderr even if a test assertion or the reader throws.
+  struct CaptureStderr {
+    std::ostringstream output;
+    std::streambuf *saved = std::cerr.rdbuf(output.rdbuf());
+    ~CaptureStderr() { std::cerr.rdbuf(saved); }
+  };
+  for (const bool status_first : {false, true}) {
+    {
+      std::ofstream file(input_path / "event0");
+      file << "#!OSCAR2013 particle_lists t x y z mass p0 px py pz pdg ID charge ";
+      file << (status_first ? "prod_time_status prod_time form_time xsecfac\n"
+                            : "prod_time form_time xsecfac prod_time_status\n");
+      file << "# event 0 out 5\n";
+      for (int i = 0; i < 5; ++i) {
+        const int status = i < 2 ? 0 : i < 4 ? 1 : 2;
+        const double production = i == 1 ? 7.0 : i == 3 ? 3.0 : 0.0;
+        const double formation = i == 4 ? 0.0 : 9.0;
+        const double factor = i == 4 ? 1.0 : 0.0;
+        file << "0 " << i << " 0 0 " << Test::smashon_mass << ' '
+             << Test::smashon_mass << " 0 0 0 661 " << i << " 0 ";
+        if (status_first) file << status << ' ';
+        file << production << ' ' << formation << ' ' << factor;
+        if (!status_first) file << ' ' << status;
+        file << '\n';
+      }
+      file << "# event 0 end\n";
+    }
+    Configuration config{R"(
+      Modi:
+        List:
+          File_Directory: ToBeSet
+          File_Prefix: event
+      )"};
+    config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+    config.set_value(InputKeys::modi_list_optionalQuantities,
+                     status_first
+                         ? std::vector<std::string>{"ID", "charge", "prod_time_status",
+                                                    "prod_time", "form_time", "xsecfac"}
+                         : std::vector<std::string>{"ID", "charge", "prod_time",
+                                                    "form_time", "xsecfac", "prod_time_status"});
+    CaptureStderr capture;
+    ListModus list_modus(std::move(config), parameters);
+    Particles particles;
+    list_modus.initial_conditions(&particles, parameters);
+    const auto created = particles.copy_to_vector();
+    COMPARE(created.size(), 5u);
+    for (size_t i = 0; i < created.size(); ++i) {
+      COMPARE(created[i].begin_formation_time(), i == 3 ? 3.0 : 0.0);
+      COMPARE(created[i].formation_time(), i == 4 ? 0.0 : 9.0);
+    }
+    const std::string warning = "prod_time_status=0); using prod_time=0.";
+    const auto text = capture.output.str();
+    size_t count = 0;
+    for (size_t pos = 0; (pos = text.find(warning, pos)) != std::string::npos;
+         pos += warning.size()) {
+      ++count;
+    }
+    // Two missing times warn during startup validation and again on import.
+    // Available zero and not-applicable rows produce no warning.
+    COMPARE(count, 4u);
+    VERIFY(text.find("particle PDG 661") != std::string::npos);
+  }
+}
+
+TEST(invalid_production_time_status) {
+  Test::create_stable_smashon_particletypes();
+  const auto input_path = testoutputpath / "invalid_production_time_status";
+  std::filesystem::create_directories(input_path);
+  Configuration config{R"(
+    Modi:
+      List:
+        File_Directory: ToBeSet
+        File_Prefix: event
+    )"};
+  config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+  config.set_value(InputKeys::modi_list_optionalQuantities,
+                   std::vector<std::string>{"prod_time", "form_time", "prod_time_status"});
+  ListModus list_modus(std::move(config), parameters);
+  for (const auto &values : {std::vector<std::string>{"2", "9", "-1"},
+                             std::vector<std::string>{"2", "9", "3"},
+                             std::vector<std::string>{"2", "9", "1.5"},
+                             std::vector<std::string>{"2", "9", "1junk"},
+                             std::vector<std::string>{"2", "9", ""},
+                             std::vector<std::string>{"2", "9"},
+                             std::vector<std::string>{"nan", "9", "1"}}) {
+    Particles particles;
+    bool rejected = false;
+    try {
+      list_modus.try_create_particle(particles, PdgCode("661"), 0.0, 0.0, 0.0,
+                                     0.0, Test::smashon_mass, Test::smashon_mass,
+                                     0.0, 0.0, 0.0, values);
+    } catch (const std::invalid_argument &) {
+      rejected = true;
+    } catch (const std::out_of_range &) {
+      rejected = true;
+    }
+    VERIFY(rejected);
+    VERIFY(particles.is_empty());
   }
 }
 

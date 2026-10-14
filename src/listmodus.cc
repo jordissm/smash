@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <list>
 #include <map>
 #include <sstream>
@@ -173,6 +174,8 @@ void ListModus::insert_optional_quantities_to_(
   double form_time = 0.0;
   bool has_prod_time = false;
   bool has_form_time = false;
+  // Legacy lists without a status column retain their numerical start time.
+  int prod_time_status = 1;
 
   for (size_t i = 0; i < optional_fields_.size(); ++i) {
     size_t len{};
@@ -202,6 +205,13 @@ void ListModus::insert_optional_quantities_to_(
     } else if (field == "form_time") {
       form_time = std::stod(quantity, &len);
       has_form_time = true;
+    } else if (field == "prod_time_status") {
+      prod_time_status = std::stoi(quantity, &len);
+      if (len != quantity.size() || prod_time_status < 0 ||
+          prod_time_status > 2) {
+        throw std::invalid_argument(
+            "prod_time_status must be an integer: 0, 1 or 2.");
+      }
     } else if (field == "xsecfac") {
       const double xsecfac = std::stod(quantity, &len);
       if (xsecfac < 0 || xsecfac > 1) {
@@ -269,6 +279,14 @@ void ListModus::insert_optional_quantities_to_(
   if (!has_prod_time || !has_form_time) {
     throw std::invalid_argument(
         "List input requires prod_time and form_time for every particle.");
+  }
+  if (prod_time_status == 0) {
+    prod_time = 0.0;
+    std::cerr << "Warning: List input particle PDG " << p.pdgcode()
+              << " has unavailable production time (prod_time_status=0); "
+                 "using prod_time=0.\n";
+  } else if (!std::isfinite(prod_time)) {
+    throw std::invalid_argument("List input production time must be finite.");
   }
   // Imported times are absolute coordinate times in fm/c.
   p.set_slow_formation_times(prod_time, form_time);

@@ -4771,8 +4771,16 @@ struct InputKeys {
    *    charge e. This is only used for a consistency check and the charge will
    *    be set according to the PDG code data.
    * - "ncoll" &rarr; Number of collisions the particle already went through.
-   * - "form_time" &rarr;  Formation time. By default it is set to the time
-   *    coordinate (first column in the input).
+   * - "prod_time" &rarr; Required start of the slow formation profile, as an
+   *    absolute coordinate time in fm/c.
+   * - "form_time" &rarr; Required end of the slow formation profile, as an
+   *    absolute coordinate time in fm/c.
+   * - "prod_time_status" &rarr; Optional integer availability status: 0 for
+   *    unavailable (forces prod_time to zero and warns on stderr), 1 for an
+   *    available reference including zero, or 2 for not applicable, e.g.
+   *    pre-existing spectator nucleons. Values 1 and 2 use the supplied
+   *    numerical time. Invalid status tokens are errors. If omitted, the
+   *    supplied production time is used without an availability warning.
    * - "xsecfac" &rarr;  Scaling factor for the cross section, limited between 0
    *    and 1. By default it is 1.
    * - "proc_type" &rarr; Type of the last interaction (See
@@ -4795,6 +4803,10 @@ struct InputKeys {
    * the input file are set to their default value when SMASH reads in the input
    * file with the list of particles. Unless stated differently, this default
    * value is 0.
+   * This ELECTRA reader requires both "prod_time" and "form_time" in the
+   * configuration and a numerical value for each on every row. Neither has
+   * a default for list input. Non-finite production times used by the profile
+   * are errors.
    *
    * \attention The code does a minimal validation to see if the quantities are
    * internally meaningful, but no check is done on the physics content.
