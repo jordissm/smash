@@ -9,6 +9,7 @@
 
 #include "smash/listmodus.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -74,7 +75,8 @@ ListModus::ListModus(Configuration modus_config,
 
   // Set the default values for the spin interaction type
   spin_interaction_type_ = param.spin_interaction_type;
-  proper_formation_time_ = modus_config.take(
+  // Consume the legacy configuration key; list input supplies both times.
+  (void)modus_config.take(
       InputKeys::collTerm_xsecFormationScaling_profile_formationTime);
 
   // Impose strict requirement on possible keys present in configuration file
@@ -96,8 +98,8 @@ ListModus::ListModus(Configuration modus_config,
     throw std::runtime_error("ListModus only makes sense with one ensemble");
   }
   optional_fields_ = modus_config.take(optional_quantities_key);
-  validate_list_of_particles_of_all_events_();
   validate_optional_fields_();
+  validate_list_of_particles_of_all_events_();
 }
 
 /* console output on startup of List specific parameters */
@@ -156,7 +158,8 @@ void ListModus::insert_optional_quantities_to_(
     ParticleData &p,
     const std::vector<std::string> &optional_quantities) const {
   if (optional_quantities.empty()) {
-    return;
+    throw std::invalid_argument(
+        "List input requires prod_time and form_time for every particle.");
   } else if (optional_quantities.size() != optional_fields_.size()) {
     using namespace std::string_literals;  // NOLINT(build/namespaces)
     throw std::out_of_range("Unexpected size mismatch in "s + __func__ +
@@ -166,8 +169,10 @@ void ListModus::insert_optional_quantities_to_(
   HistoryData hist = p.get_history();
   std::ostringstream error_message{"", std::ios_base::ate};
 
-  double prod_time = p.position().x0();
+  double prod_time = 0.0;
+  double form_time = 0.0;
   bool has_prod_time = false;
+  bool has_form_time = false;
 
   for (size_t i = 0; i < optional_fields_.size(); ++i) {
     size_t len{};
@@ -195,8 +200,8 @@ void ListModus::insert_optional_quantities_to_(
       prod_time = std::stod(quantity, &len);
       has_prod_time = true;
     } else if (field == "form_time") {
-      // Parse the new column; applying it to the formation profile is deferred.
-      (void)std::stod(quantity, &len);
+      form_time = std::stod(quantity, &len);
+      has_form_time = true;
     } else if (field == "xsecfac") {
       const double xsecfac = std::stod(quantity, &len);
       if (xsecfac < 0 || xsecfac > 1) {
@@ -261,14 +266,12 @@ void ListModus::insert_optional_quantities_to_(
     }
   }
 
-  if (has_prod_time) {
-    double gamma = std::sqrt(
-        1 + p.momentum().sqr3() / (p.momentum().x0() * p.momentum().x0()));
-    double form_time = prod_time + proper_formation_time_ * gamma;
-
-    // Use a "slow" hadronic formation profile
-    p.set_slow_formation_times(prod_time, form_time);
+  if (!has_prod_time || !has_form_time) {
+    throw std::invalid_argument(
+        "List input requires prod_time and form_time for every particle.");
   }
+  // Imported times are absolute coordinate times in fm/c.
+  p.set_slow_formation_times(prod_time, form_time);
 
   if (error_message.str().size() > 0) {
     logg[LList].error()
@@ -498,6 +501,12 @@ void ListModus::validate_list_of_particles_of_all_events_() const {
         are_there_faulty_events = true;
       }
       utility_copy.event_id_++;
+    } catch (const LoadFailure &) {
+      throw;
+    } catch (const std::invalid_argument &) {
+      throw;
+    } catch (const std::out_of_range &) {
+      throw;
     } catch (const std::exception &) {
       break;
     }
@@ -510,6 +519,14 @@ void ListModus::validate_list_of_particles_of_all_events_() const {
 }
 
 void ListModus::validate_optional_fields_() const {
+  if (std::find(optional_fields_.begin(), optional_fields_.end(), "prod_time") ==
+          optional_fields_.end() ||
+      std::find(optional_fields_.begin(), optional_fields_.end(), "form_time") ==
+          optional_fields_.end()) {
+    throw std::invalid_argument(
+        "List input requires both prod_time and form_time in "
+        "Optional_Quantities.");
+  }
   // If spin interactions are enabled, require all four spin components.
   if (spin_interaction_type_ != SpinInteractionType::Off) {
     std::array<bool, 4> has_spin{{false, false, false, false}};

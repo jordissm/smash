@@ -211,10 +211,10 @@ class ListModus : public ModusDefault {
   void validate_list_of_particles_of_all_events_() const;
 
   /**
-   * Validate the optional fields. At the moment, it ensures that if at least
-   * one spin component is given, all four are given.
+   * Require production and formation times, and all four spin components
+   * when spin interactions are enabled.
    *
-   * \throw std::invalid_argument if not all spin components are given.
+   * \throw std::invalid_argument if required fields are missing.
    */
   void validate_optional_fields_() const;
 
@@ -278,9 +278,6 @@ class ListModus : public ModusDefault {
 
   /// Auxiliary flag to indicate the type of spin interaction used
   SpinInteractionType spin_interaction_type_ = SpinInteractionType::Off;
-
-  /// Proper formation time for slow cross-section formation profiles
-  double proper_formation_time_ = 0.0;
 
   /**
    * Flag to suppress some error messages. This is used during the validation

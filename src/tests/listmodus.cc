@@ -11,6 +11,7 @@
 
 #include "smash/listmodus.h"
 
+#include <cmath>
 #include <filesystem>
 #include <string>
 
@@ -623,6 +624,128 @@ TEST(try_create_particle_with_spin_func) {
   const ParticleList plist = particles.copy_to_vector();
   const ParticleData created = plist.back();
   compare_fourvector(created.spin_vector(), spin_vec);
+}
+
+TEST(imported_production_and_formation_times) {
+  Test::create_stable_smashon_particletypes();
+  const auto input_path = testoutputpath / "formation_times";
+  std::filesystem::create_directories(input_path);
+  for (const bool reverse_fields : {false, true}) {
+    Configuration config{R"(
+      Modi:
+        List:
+          File_Directory: ToBeSet
+          File_Prefix: event
+      )"};
+    config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+    config.set_value(InputKeys::modi_list_optionalQuantities,
+                     reverse_fields
+                         ? std::vector<std::string>{"form_time", "prod_time"}
+                         : std::vector<std::string>{"prod_time", "form_time"});
+    ListModus list_modus(std::move(config), parameters);
+    Particles particles;
+    const double mass = Test::smashon_mass;
+    const double px = 0.4;
+    const double energy = std::sqrt(mass * mass + px * px);
+    for (int i = 0; i < 3; ++i) {
+      const double prod_time = i == 2 ? 0.0 : 2.0 + i;
+      const double form_time = i == 2 ? 0.0 : 9.0 + 2.0 * i;
+      const std::vector<std::string> times =
+          reverse_fields
+              ? std::vector<std::string>{std::to_string(form_time),
+                                         std::to_string(prod_time)}
+              : std::vector<std::string>{std::to_string(prod_time),
+                                         std::to_string(form_time)};
+      list_modus.try_create_particle(particles, PdgCode("661"), 0.0, i, 0.0, 0.0,
+                                     mass, energy, px, 0.0, 0.0, times);
+      const ParticleData created = particles.copy_to_vector().back();
+      COMPARE(created.begin_formation_time(), prod_time);
+      COMPARE(created.formation_time(), form_time);
+      COMPARE(created.position().x0(), 0.0);
+    }
+  }
+}
+
+TEST(missing_production_or_formation_fields) {
+  for (const auto &fields : {std::vector<std::string>{},
+                             std::vector<std::string>{"prod_time"},
+                             std::vector<std::string>{"form_time"}}) {
+    Configuration config{R"(
+      Modi:
+        List:
+          File_Directory: ToBeSet
+          File_Prefix: event
+      )"};
+    config.set_value(InputKeys::modi_list_fileDirectory, testoutputpath.string());
+    config.set_value(InputKeys::modi_list_optionalQuantities, fields);
+    bool rejected = false;
+    try {
+      ListModus list_modus(std::move(config), parameters);
+    } catch (const std::invalid_argument &error) {
+      rejected = true;
+      VERIFY(std::string(error.what()).find("prod_time and form_time") !=
+             std::string::npos);
+    }
+    VERIFY(rejected);
+  }
+}
+
+TEST(missing_production_or_formation_values) {
+  Test::create_stable_smashon_particletypes();
+  const auto input_path = testoutputpath / "formation_times";
+  std::filesystem::create_directories(input_path);
+  Configuration config{R"(
+    Modi:
+      List:
+        File_Directory: ToBeSet
+        File_Prefix: event
+    )"};
+  config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+  config.set_value(InputKeys::modi_list_optionalQuantities,
+                   std::vector<std::string>{"prod_time", "form_time"});
+  ListModus list_modus(std::move(config), parameters);
+  for (const auto &values : {std::vector<std::string>{},
+                             std::vector<std::string>{"2"},
+                             std::vector<std::string>{"", "9"},
+                             std::vector<std::string>{"2", ""}}) {
+    Particles particles;
+    bool rejected = false;
+    try {
+      list_modus.try_create_particle(particles, PdgCode("661"), 0.0, 0.0, 0.0,
+                                     0.0, Test::smashon_mass,
+                                     Test::smashon_mass, 0.0, 0.0, 0.0, values);
+    } catch (const std::invalid_argument &) {
+      rejected = true;
+    } catch (const std::out_of_range &) {
+      rejected = true;
+    }
+    VERIFY(rejected);
+    VERIFY(particles.is_empty());
+  }
+}
+
+TEST_CATCH(missing_time_in_particle_file, ListModus::LoadFailure) {
+  Test::create_stable_smashon_particletypes();
+  const auto input_path = testoutputpath / "missing_time";
+  std::filesystem::create_directories(input_path);
+  {
+    std::ofstream file(input_path / "event0");
+    // The second particle omits form_time; validation must fail at startup.
+    file << "# event 0 start\n"
+         << "0 0 0 0 0.123 0.123 0 0 0 661 2 9\n"
+         << "0 1 0 0 0.123 0.123 0 0 0 661 3\n"
+         << "# event 0 end\n";
+  }
+  Configuration config{R"(
+    Modi:
+      List:
+        File_Directory: ToBeSet
+        File_Prefix: event
+    )"};
+  config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+  config.set_value(InputKeys::modi_list_optionalQuantities,
+                   std::vector<std::string>{"prod_time", "form_time"});
+  ListModus list_modus(std::move(config), parameters);
 }
 
 TEST_CATCH(insert_optional_quantities_to_func, std::out_of_range) {
