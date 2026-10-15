@@ -918,14 +918,19 @@ Experiment<Modus>::Experiment(Configuration &config,
         const bool is_list_modus =
             config.has_value(InputKeys::modi_list_fileDirectory) ||
             config.has_value(InputKeys::modi_listBox_fileDirectory);
-        const auto &formation_time_key =
-            InputKeys::collTerm_xsecFormationScaling_profile_formationTime;
-        const double xsec_formation_time =
-            is_list_modus ? config.take(formation_time_key) : 0.0;
+        const auto &formation_mode_key =
+            InputKeys::collTerm_xsecFormationScaling_formationTime_mode;
+        const auto &proper_time_key =
+            InputKeys::collTerm_xsecFormationScaling_formationTime_properTime;
+        const std::string formation_mode =
+            is_list_modus ? config.take(formation_mode_key) : "OSCAR";
+        const double proper_time =
+            is_list_modus ? config.take(proper_time_key) : 1.0;
         auto modus_config =
             config.extract_complete_sub_configuration(InputSections::modi);
         if (is_list_modus) {
-          modus_config.set_value(formation_time_key, xsec_formation_time);
+          modus_config.set_value(formation_mode_key, formation_mode);
+          modus_config.set_value(proper_time_key, proper_time);
         }
         if (restore_key) {
           config.set_value(key, temporary_taken_key);

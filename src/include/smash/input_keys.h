@@ -75,6 +75,9 @@ struct InputSections {
   /// Subsection for the cross section scaling profile
   inline static const Section c_xsecFormationScaling_profile =
       InputSections::c_xsecFormationScaling + "Profile";
+  /// ELECTRA list-input formation-time prescription
+  inline static const Section c_xsecFormationScaling_formationTime =
+      InputSections::c_xsecFormationScaling + "Formation_Time";
 
   /// Section for the forced thermalization
   inline static const Section forcedThermalization{"Forced_Thermalization"};
@@ -2179,11 +2182,19 @@ struct InputKeys {
   inline static const Key<double> collTerm_crossSectionScaling{
       InputSections::collisionTerm + "Cross_Section_Scaling", 1.0, {"2.0"}};
 
-  /*!\Userguide
-   *
+  /**
+   * ELECTRA List/ListBox prescription: OSCAR imports both coordinate times;
+   * Constant_Proper_Time replaces the endpoint by prod_time + (E/m)*Proper_Time.
+   * Spectators marked prod_time_status=2 are already formed in the latter mode.
    */
-  inline static const Key<double> collTerm_xsecFormationScaling_profile_formationTime{
-      InputSections::c_xsecFormationScaling_profile + "Formation_Time", 1.0, {"2.00"}};
+  inline static const Key<std::string> collTerm_xsecFormationScaling_formationTime_mode{
+      InputSections::c_xsecFormationScaling_formationTime + "Mode",
+      std::string{"OSCAR"}, {"3.3"}};
+
+  /// Constant rest-frame formation interval in fm/c (List/ListBox only).
+  inline static const Key<double> collTerm_xsecFormationScaling_formationTime_properTime{
+      InputSections::c_xsecFormationScaling_formationTime + "Proper_Time",
+      1.0, {"3.3"}};
 
   inline static const Key<std::string> collTerm_xsecFormationScaling_profile_path{
       InputSections::c_xsecFormationScaling_profile + "Path", {"0.50"}};
@@ -4773,8 +4784,9 @@ struct InputKeys {
    * - "ncoll" &rarr; Number of collisions the particle already went through.
    * - "prod_time" &rarr; Required start of the slow formation profile, as an
    *    absolute coordinate time in fm/c.
-   * - "form_time" &rarr; Required end of the slow formation profile, as an
-   *    absolute coordinate time in fm/c.
+   * - "form_time" &rarr; End of the slow formation profile, as an absolute
+   *    coordinate time in fm/c. Required in the default OSCAR mode; ignored
+   *    (and may be omitted) in Constant_Proper_Time mode.
    * - "prod_time_status" &rarr; Optional integer availability status: 0 for
    *    unavailable (forces prod_time to zero and warns on stderr), 1 for an
    *    available reference including zero, or 2 for not applicable, e.g.
@@ -4803,10 +4815,13 @@ struct InputKeys {
    * the input file are set to their default value when SMASH reads in the input
    * file with the list of particles. Unless stated differently, this default
    * value is 0.
-   * This ELECTRA reader requires both "prod_time" and "form_time" in the
-   * configuration and a numerical value for each on every row. Neither has
-   * a default for list input. Non-finite production times used by the profile
-   * are errors.
+   * This ELECTRA reader defaults to Formation_Time: Mode: OSCAR under
+   * Collision_Term: Cross_Section_Formation_Scaling. It requires "prod_time"
+   * and "form_time" in the configuration and a numerical value for each on
+   * every row. Constant_Proper_Time mode requires only "prod_time" and uses
+   * prod_time + (E/m)*Proper_Time as its endpoint, with Proper_Time in fm/c.
+   * In that mode, status 2 sets both endpoints to prod_time (already formed).
+   * Non-finite production times used by the profile are errors.
    *
    * \attention The code does a minimal validation to see if the quantities are
    * internally meaningful, but no check is done on the physics content.
@@ -6163,7 +6178,8 @@ struct InputKeys {
       std::cref(collTerm_additionalElasticCrossSection),
       std::cref(collTerm_collisionCriterion),
       std::cref(collTerm_crossSectionScaling),
-      std::cref(collTerm_xsecFormationScaling_profile_formationTime),
+      std::cref(collTerm_xsecFormationScaling_formationTime_mode),
+      std::cref(collTerm_xsecFormationScaling_formationTime_properTime),
       std::cref(collTerm_xsecFormationScaling_profile_path),
       std::cref(collTerm_elasticCrossSection),
       std::cref(collTerm_elasticNNCutoffSqrts),

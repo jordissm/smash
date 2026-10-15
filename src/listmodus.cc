@@ -76,9 +76,19 @@ ListModus::ListModus(Configuration modus_config,
 
   // Set the default values for the spin interaction type
   spin_interaction_type_ = param.spin_interaction_type;
-  // Consume the legacy configuration key; list input supplies both times.
-  (void)modus_config.take(
-      InputKeys::collTerm_xsecFormationScaling_profile_formationTime);
+  const std::string formation_mode = modus_config.take(
+      InputKeys::collTerm_xsecFormationScaling_formationTime_mode);
+  if (formation_mode != "OSCAR" && formation_mode != "Constant_Proper_Time") {
+    throw std::invalid_argument(
+        "Formation_Time: Mode must be OSCAR or Constant_Proper_Time.");
+  }
+  use_constant_proper_time_ = formation_mode == "Constant_Proper_Time";
+  proper_formation_time_ = modus_config.take(
+      InputKeys::collTerm_xsecFormationScaling_formationTime_properTime);
+  if (!std::isfinite(proper_formation_time_) || proper_formation_time_ < 0.0) {
+    throw std::invalid_argument(
+        "Formation_Time: Proper_Time must be finite and non-negative (fm/c).");
+  }
 
   // Impose strict requirement on possible keys present in configuration file
   const bool file_prefix_used = modus_config.has_value(file_prefix_key);
@@ -160,7 +170,9 @@ void ListModus::insert_optional_quantities_to_(
     const std::vector<std::string> &optional_quantities) const {
   if (optional_quantities.empty()) {
     throw std::invalid_argument(
-        "List input requires prod_time and form_time for every particle.");
+        use_constant_proper_time_
+            ? "List input requires prod_time for every particle."
+            : "List input requires prod_time and form_time for every particle.");
   } else if (optional_quantities.size() != optional_fields_.size()) {
     using namespace std::string_literals;  // NOLINT(build/namespaces)
     throw std::out_of_range("Unexpected size mismatch in "s + __func__ +
@@ -276,9 +288,11 @@ void ListModus::insert_optional_quantities_to_(
     }
   }
 
-  if (!has_prod_time || !has_form_time) {
+  if (!has_prod_time || (!use_constant_proper_time_ && !has_form_time)) {
     throw std::invalid_argument(
-        "List input requires prod_time and form_time for every particle.");
+        use_constant_proper_time_
+            ? "List input requires prod_time for every particle."
+            : "List input requires prod_time and form_time for every particle.");
   }
   if (prod_time_status == 0) {
     prod_time = 0.0;
@@ -288,7 +302,27 @@ void ListModus::insert_optional_quantities_to_(
   } else if (!std::isfinite(prod_time)) {
     throw std::invalid_argument("List input production time must be finite.");
   }
-  // Imported times are absolute coordinate times in fm/c.
+  if (use_constant_proper_time_) {
+    // Status 2 denotes pre-existing particles, which must not form again.
+    form_time = prod_time;
+    if (prod_time_status != 2) {
+      const double mass = p.effective_mass();
+      const double energy = p.momentum().x0();
+      if (!std::isfinite(mass) || mass <= 0.0 ||
+          !std::isfinite(energy) || energy <= 0.0) {
+        throw std::invalid_argument(
+            "Constant proper-time formation requires positive finite mass "
+            "and energy.");
+      }
+      // Use the validated SMASH momentum, including on-shell corrections.
+      form_time += (energy / mass) * proper_formation_time_;
+      if (!std::isfinite(form_time)) {
+        throw std::invalid_argument(
+            "Constant proper-time formation endpoint must be finite.");
+      }
+    }
+  }
+  // Both endpoints are absolute coordinate times in fm/c.
   p.set_slow_formation_times(prod_time, form_time);
 
   if (error_message.str().size() > 0) {
@@ -539,11 +573,14 @@ void ListModus::validate_list_of_particles_of_all_events_() const {
 void ListModus::validate_optional_fields_() const {
   if (std::find(optional_fields_.begin(), optional_fields_.end(), "prod_time") ==
           optional_fields_.end() ||
-      std::find(optional_fields_.begin(), optional_fields_.end(), "form_time") ==
-          optional_fields_.end()) {
+      (!use_constant_proper_time_ &&
+       std::find(optional_fields_.begin(), optional_fields_.end(), "form_time") ==
+           optional_fields_.end())) {
     throw std::invalid_argument(
-        "List input requires both prod_time and form_time in "
-        "Optional_Quantities.");
+        use_constant_proper_time_
+            ? "List input requires prod_time in Optional_Quantities."
+            : "List input requires both prod_time and form_time in "
+              "Optional_Quantities.");
   }
   // If spin interactions are enabled, require all four spin components.
   if (spin_interaction_type_ != SpinInteractionType::Off) {

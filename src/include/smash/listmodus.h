@@ -152,6 +152,12 @@ class ListModus : public ModusDefault {
   double start_time_ = 0.;
 
  private:
+  /// Whether to replace the imported formation endpoint by a proper interval.
+  bool use_constant_proper_time_ = false;
+
+  /// Rest-frame formation interval in fm/c, used only in the secondary mode.
+  double proper_formation_time_ = 1.0;
+
   /**
    * Read the next event from file.
    *

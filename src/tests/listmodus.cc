@@ -27,6 +27,15 @@ static const std::filesystem::path testoutputpath =
     std::filesystem::absolute(SMASH_TEST_OUTPUT_PATH);
 static const auto parameters = Test::default_parameters();
 
+// The type registry is process-global and can only be initialized once.
+// Each formation-time test must also work when selected with --only.
+static void ensure_particle_types() {
+  [[maybe_unused]] static const bool initialized = [] {
+    Test::create_stable_smashon_particletypes();
+    return true;
+  }();
+}
+
 static std::filesystem::path create_particlefile(
     const OutputParameters out_par, const int file_number,
     std::vector<ParticleList> &init_particle_vec,
@@ -184,7 +193,7 @@ TEST(directory_is_created) {
   VERIFY(std::filesystem::exists(testoutputpath));
 }
 
-TEST(create_particle_types) { Test::create_stable_smashon_particletypes(); }
+TEST(create_particle_types) { ensure_particle_types(); }
 
 static void compare_fourvector(const FourVector &a, const FourVector &b) {
   COMPARE_ABSOLUTE_ERROR(a.x0(), b.x0(), accuracy);
@@ -629,7 +638,7 @@ TEST(try_create_particle_with_spin_func) {
 }
 
 TEST(imported_production_and_formation_times) {
-  Test::create_stable_smashon_particletypes();
+  ensure_particle_types();
   const auto input_path = testoutputpath / "formation_times";
   std::filesystem::create_directories(input_path);
   for (const bool reverse_fields : {false, true}) {
@@ -644,6 +653,14 @@ TEST(imported_production_and_formation_times) {
                      reverse_fields
                          ? std::vector<std::string>{"form_time", "prod_time"}
                          : std::vector<std::string>{"prod_time", "form_time"});
+    if (reverse_fields) {
+      config.set_value(
+          InputKeys::collTerm_xsecFormationScaling_formationTime_mode,
+          std::string{"OSCAR"});
+      config.set_value(
+          InputKeys::collTerm_xsecFormationScaling_formationTime_properTime,
+          100.0);
+    }
     ListModus list_modus(std::move(config), parameters);
     Particles particles;
     const double mass = Test::smashon_mass;
@@ -668,8 +685,153 @@ TEST(imported_production_and_formation_times) {
   }
 }
 
+TEST(constant_proper_formation_times) {
+  ensure_particle_types();
+  const auto input_path = testoutputpath / "constant_proper_times";
+  std::filesystem::create_directories(input_path);
+  for (const bool include_form_time : {false, true}) {
+    for (const double proper_time : {0.0, 1.6}) {
+      Configuration config{R"(
+        Modi:
+          List:
+            File_Directory: ToBeSet
+            File_Prefix: event
+        Collision_Term:
+          Cross_Section_Formation_Scaling:
+            Formation_Time:
+              Mode: Constant_Proper_Time
+        )"};
+      config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+      config.set_value(
+          InputKeys::collTerm_xsecFormationScaling_formationTime_properTime,
+          proper_time);
+      std::vector<std::string> fields{"prod_time_status", "xsecfac", "prod_time"};
+      if (include_form_time) fields.push_back("form_time");
+      config.set_value(InputKeys::modi_list_optionalQuantities, fields);
+      ListModus list_modus(std::move(config), parameters);
+      Particles particles;
+      for (const double gamma : {1.0, 1.25, 5.0}) {
+        const double mass = Test::smashon_mass;
+        const double px = mass * std::sqrt(gamma * gamma - 1.0);
+        std::vector<std::string> values{"1", "0", "2.5"};
+        if (include_form_time) values.push_back("999");
+        list_modus.try_create_particle(
+            particles, PdgCode("661"), 0.0, gamma, 0.0, 0.0, mass,
+            gamma * mass, px, 0.0, 0.0, values);
+        const auto created = particles.copy_to_vector().back();
+        COMPARE(created.begin_formation_time(), 2.5);
+        COMPARE_ABSOLUTE_ERROR(created.formation_time(),
+                               2.5 + gamma * proper_time, 1.e-12);
+        COMPARE(created.position().x0(), 0.0);
+        COMPARE(created.position().x1(), gamma);
+        COMPARE(created.initial_xsec_scaling_factor(), 0.0);
+        COMPARE(created.xsec_scaling_factor(created.formation_time()), 1.0);
+      }
+      // Spectators must not acquire a new formation interval, even if the
+      // imported endpoint says otherwise. Also verify available zero times.
+      for (const int status : {0, 1, 2}) {
+        std::vector<std::string> values{
+            std::to_string(status), "1", status == 0 ? "7" : "0"};
+        if (include_form_time) values.push_back("999");
+        list_modus.try_create_particle(
+            particles, PdgCode("661"), 0.0, status, 0.0, 0.0,
+            Test::smashon_mass, Test::smashon_mass, 0.0, 0.0, 0.0, values);
+        const auto created = particles.copy_to_vector().back();
+        COMPARE(created.begin_formation_time(), 0.0);
+        COMPARE(created.formation_time(), status == 2 ? 0.0 : proper_time);
+        COMPARE(created.xsec_scaling_factor(), 1.0);
+      }
+    }
+  }
+}
+
+TEST(constant_proper_time_listbox_file) {
+  ensure_particle_types();
+  const auto input_path = testoutputpath / "constant_proper_listbox";
+  std::filesystem::create_directories(input_path);
+  {
+    std::ofstream file(input_path / "event0");
+    file << "# event 0 start\n"
+         << "0 1 0 0 0.123 0.15375 0.09225 0 0 661 2.5 0 1\n"
+         << "0 2 0 0 0.123 0.123 0 0 0 661 0 1 2\n"
+         << "# event 0 end\n";
+  }
+  Configuration config{R"(
+    Modi:
+      ListBox:
+        File_Directory: ToBeSet
+        Filename: event0
+        Length: 10.0
+        Optional_Quantities: [prod_time, xsecfac, prod_time_status]
+    Collision_Term:
+      Cross_Section_Formation_Scaling:
+        Formation_Time:
+          Mode: Constant_Proper_Time
+          Proper_Time: 1.6
+    )"};
+  config.set_value(InputKeys::modi_listBox_fileDirectory, input_path.string());
+  ListBoxModus list_modus(std::move(config), parameters);
+  // Exercise file parsing, startup validation, and single-file replay.
+  for (int replay = 0; replay < 2; ++replay) {
+    Particles particles;
+    list_modus.initial_conditions(&particles, parameters);
+    const auto created = particles.copy_to_vector();
+    COMPARE(created.size(), 2u);
+    COMPARE_ABSOLUTE_ERROR(created[0].formation_time(), 4.5, 1.e-12);
+    COMPARE(created[1].formation_time(), 0.0);
+  }
+}
+
+TEST(invalid_formation_time_configuration) {
+  const auto input_path = testoutputpath / "invalid_formation_mode";
+  std::filesystem::create_directories(input_path);
+  for (const std::string &setting : {"{Mode: Unknown}",
+                                     "{Mode: Constant_Proper_Time, Proper_Time: -1}",
+                                     "{Mode: Constant_Proper_Time, Proper_Time: .nan}",
+                                     "{Mode: Constant_Proper_Time, Proper_Time: .inf}"}) {
+    const std::string yaml = std::string{
+        "Modi: {List: {File_Directory: ToBeSet, File_Prefix: event, "
+        "Optional_Quantities: [prod_time, form_time]}}\n"
+        "Collision_Term: {Cross_Section_Formation_Scaling: {Formation_Time: "} +
+        setting + "}}";
+    Configuration config{yaml.c_str()};
+    config.set_value(InputKeys::modi_list_fileDirectory, input_path.string());
+    bool rejected = false;
+    try {
+      ListModus list_modus(std::move(config), parameters);
+    } catch (const std::invalid_argument &) {
+      rejected = true;
+    }
+    VERIFY(rejected);
+  }
+}
+
+TEST(constant_proper_time_requires_production) {
+  Configuration config{R"(
+    Modi:
+      List:
+        File_Directory: ToBeSet
+        File_Prefix: event
+        Optional_Quantities: [form_time]
+    Collision_Term:
+      Cross_Section_Formation_Scaling:
+        Formation_Time:
+          Mode: Constant_Proper_Time
+    )"};
+  config.set_value(InputKeys::modi_list_fileDirectory, testoutputpath.string());
+  bool rejected = false;
+  try {
+    ListModus list_modus(std::move(config), parameters);
+  } catch (const std::invalid_argument &error) {
+    rejected = true;
+    VERIFY(std::string(error.what()).find("requires prod_time") !=
+           std::string::npos);
+  }
+  VERIFY(rejected);
+}
+
 TEST(imported_production_time_status) {
-  Test::create_stable_smashon_particletypes();
+  ensure_particle_types();
   const auto input_path = testoutputpath / "production_time_status";
   std::filesystem::create_directories(input_path);
   // Restore stderr even if a test assertion or the reader throws.
@@ -737,7 +899,7 @@ TEST(imported_production_time_status) {
 }
 
 TEST(invalid_production_time_status) {
-  Test::create_stable_smashon_particletypes();
+  ensure_particle_types();
   const auto input_path = testoutputpath / "invalid_production_time_status";
   std::filesystem::create_directories(input_path);
   Configuration config{R"(
@@ -798,7 +960,7 @@ TEST(missing_production_or_formation_fields) {
 }
 
 TEST(missing_production_or_formation_values) {
-  Test::create_stable_smashon_particletypes();
+  ensure_particle_types();
   const auto input_path = testoutputpath / "formation_times";
   std::filesystem::create_directories(input_path);
   Configuration config{R"(
@@ -832,7 +994,7 @@ TEST(missing_production_or_formation_values) {
 }
 
 TEST_CATCH(missing_time_in_particle_file, ListModus::LoadFailure) {
-  Test::create_stable_smashon_particletypes();
+  ensure_particle_types();
   const auto input_path = testoutputpath / "missing_time";
   std::filesystem::create_directories(input_path);
   {

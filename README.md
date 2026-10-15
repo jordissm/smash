@@ -1,5 +1,4 @@
 # SMASH
-
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3484711.svg)](https://doi.org/10.5281/zenodo.3484711)
 
 SMASH (Simulating Many Accelerated Strongly-interacting Hadrons) is a relativistic hadronic transport approach for the dynamical description of heavy-ion reactions.
@@ -15,6 +14,60 @@ If Pythia is used, please cite the following references (both article and the co
 * [SciPost Phys. Codebases 8-r8.3](https://scipost.org/SciPostPhysCodeb.8-r8.3) (2022), DOI: `10.21468/SciPostPhysCodeb.8-r8.3`.
 
 Report issues [on GitHub](https://github.com/smash-transport/smash/issues) or contact us by  [✉️ email](mailto:elfner@itp.uni-frankfurt.de).
+
+## ELECTRA formation-time modes
+
+The ELECTRA fork defaults to importing the Lund-based `prod_time` and
+`form_time` coordinate times from OSCAR in List and ListBox modes. The bundled
+`input/smash/config_files/config.yaml` omits the formation-time section and uses
+this default implicitly. The equivalent explicit setting is:
+
+```yaml
+Collision_Term:
+    Cross_Section_Formation_Scaling:
+        Formation_Time:
+            Mode: OSCAR
+```
+
+Both columns must be declared in `Modi.List.Optional_Quantities` (or
+`Modi.ListBox.Optional_Quantities`) and present on every particle row. Missing
+times are errors; there is no automatic fallback to a different prescription.
+
+To select a constant rest-frame interval instead:
+
+```yaml
+Collision_Term:
+    Cross_Section_Formation_Scaling:
+        Formation_Time:
+            Mode: Constant_Proper_Time
+            Proper_Time: 1.0  # fm/c, finite and non-negative
+```
+
+This keeps the OSCAR production time and sets
+`t_form = t_prod + (E/m) * Proper_Time`, using SMASH's validated energy and
+effective mass. The mode changes the formation profile endpoints; it leaves
+the imported particle positions and free-streaming trajectories intact.
+`prod_time` remains required. If `form_time` is present it is read and ignored;
+it may be omitted only when the corresponding column is absent from the file
+and from `Optional_Quantities`. Keep the full column list for ELECTRA files.
+The default `Proper_Time` is 1.0 fm/c and has no effect in `OSCAR` mode.
+
+In both modes, optional `prod_time_status=0` forces the production time to zero
+with a warning, and status 1 uses the supplied time, including zero. In constant
+mode, status 2 marks pre-existing spectators: both endpoints equal their
+production time, so they are already fully formed. Legacy files without a
+status column use their numerical production times and cannot identify this
+spectator exemption; include the status column when using constant mode with
+spectators.
+
+`Profile.Path` remains the file controlling the cross-section shape as a
+function of normalized formation progress, independently of either timing
+mode. The old custom `Profile.Formation_Time` key has been replaced by the
+explicit `Formation_Time` section above. Stock SMASH options, including
+`Collision_Term.String_Parameters.Formation_Time`, are unchanged. The local
+Python and SLURM pipelines use the implicit `OSCAR` default with the shared
+template; selecting the secondary mode requires a custom configuration.
+Rebuild SMASH or the container to use these options.
 
 ## How to build and install SMASH
 
